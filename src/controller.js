@@ -7,37 +7,59 @@ import {pool} from './database.js';
 class LibroController {
     // obtenemos todo lo que tengamos en la BD con el metodo "getAll"
     async getAll(req, res) {
-        const [result] = await pool.query('SELECT * FROM libros');
-        res.json(result);
+        try {
+            const [result] = await pool.query('SELECT * FROM libros');
+            res.json(result);
+
+        } catch (error) {
+            res.status(500).json({ error: 'Ocurrió un error al obtener los datos. Intente nuevamente' });
+        }
     }
     
     // obtenemos los datos de un registro a partir del id
-    async getOne(req, res){
+    async getOne(req, res) {
         try {
             const libro = req.body;
             const id_libro = parseInt(libro.id);
-            const [result] = await pool.query(`SELECT * FROM libros WHERE id=(?)`, [id_libro]);
-            
-            if (result.length === 0) {
-                throw new Error('Ups! El libro no fue encontrado. Intente nuevamente');
+            const [result] = await pool.query('SELECT * FROM libros WHERE id = ?', [id_libro]);
+    
+            if (result[0] !== undefined) {
+                res.json(result);
+            } else {
+                res.status(404).json({ "Error": 'Ups! no se ha encontrado el libro con ese ID' });
             }
 
-            res.json(result[0]);
-
         } catch (error) {
-            console.error(error);
-            res.status(404).json({ error: 'El ID que busca no existe' });
+            res.status(400).json({ error: error.message });
         }
     }
-
+    
     // agregar un nuevo registro
     async add(req, res) {
-        const libro = req.body;
-        const [result] = await pool.query(`INSERT INTO libros(nombre, autor, categoria, anio_publicacion, isbn) 
-        VALUES (?, ?, ?, ?, ?)`, [libro.nombre, libro.autor, libro.categoria, libro.anio_publicacion, libro.isbn]);
-        res.json({"Id insertado": result.insertId});
-    }
+        try {
+            const libro = req.body;
+            
+            // Se realiza una verificacion antes de insertar, si los campos estan vacios, lanza error
+            if (libro.nombre.trim() === '' || libro.autor.trim() === '' || libro.categoria.trim() === '') {
+                throw new Error("Complete los campos correctamente");
+            }
 
+            // Se realiza la inserción en la base de datos
+            const [result] = await pool.query(`INSERT INTO libros(nombre, autor, categoria, anio_publicacion, isbn) 
+                VALUES (?, ?, ?, ?, ?)`, [libro.nombre, libro.autor, libro.categoria, libro.anio_publicacion, libro.isbn]);
+            
+            // Verifica si se inserto correctamente, sino, lanza error
+            if (result.affectedRows === 1) {
+                res.json({ "Id insertado": result.insertId });
+            } else {
+                throw new Error("No se pudo insertar el libro en la base de datos");
+            }
+
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+    
     // actualizar un registro existente
     async update(req, res) {
         try {
@@ -48,21 +70,35 @@ class LibroController {
 
             if (result.changedRows === 0 || libro.id === 0 || libro.id == "") {
                 throw new Error('El libro que busca no fue encontrado');
-            }
-
-            res.json({"Registros actualizados": result.changedRows});
+            } else {
+                res.json({"Registros actualizados": result.changedRows});
+            }          
 
         } catch (error) {
-            console.error(error);
             res.status(404).json({ error: 'El ID no existe' });
         }
     }
 
     // borrar un registro
     async delete(req, res) {
-        const libro = req.body;
-        const [result] = await pool.query(`DELETE FROM libros WHERE isbn=(?)`, [libro.isbn]);
-        res.json({"Registros eliminados": result.affectedRows});
+        try {
+            const libro = req.body;
+            // Se verifica si el libro se encuentra cargado en la base de datos, si se encuentra, se elimina. sino, lanza error
+
+            if (!libro.isbn) {
+                throw new Error("El ISBN no ha sido completado. Intente nuevamente");
+            }
+    
+            const [result] = await pool.query('DELETE FROM libros WHERE isbn = ?', [libro.isbn]);
+    
+            if (result.affectedRows > 0) {
+                res.json({ "Registros eliminados": result.affectedRows });
+            } else {
+                res.status(404).json({ "Error": 'No se ha encontrado el libro o, el mismo no existe' });
+            }
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     }
 }
 
